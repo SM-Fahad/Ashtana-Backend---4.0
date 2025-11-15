@@ -41,8 +41,13 @@ public class MyBagItemController {
         return ResponseEntity.ok(myBagItemService.getItemsByBagId(bagId));
     }
 
+//    @DeleteMapping("/{id}")
+//    public ResponseEntity<MyBagItemResponseDTO> deleteCartItem(@PathVariable Long id) {
+//        return ResponseEntity.ok(myBagItemService.deleteItem(id));
+//    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<MyBagItemResponseDTO> deleteCartItem(@PathVariable Long id) {
-        return ResponseEntity.ok(myBagItemService.deleteItem(id));
+        return ResponseEntity.ok(myBagItemService.deleteItemNative(id));
     }
 }
