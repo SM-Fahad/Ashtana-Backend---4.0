@@ -8,6 +8,7 @@ import com.ashtana.backend.Entity.Product;
 import com.ashtana.backend.Repository.MyBagItemsRepo;
 import com.ashtana.backend.Repository.MyBagRepo;
 import com.ashtana.backend.Repository.ProductRepo;
+import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityNotFoundException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,12 +25,76 @@ public class MyBagItemService {
     private final MyBagRepo myBagRepo;
     private final ProductRepo productRepo;
     private final MyBagService myBagService;
+    private final EntityManager entityManager;
 
-    public MyBagItemService(MyBagItemsRepo myBagItemRepo, MyBagRepo myBagRepo, ProductRepo productRepo, MyBagService myBagService) {
+    public MyBagItemService(MyBagItemsRepo myBagItemRepo, MyBagRepo myBagRepo,
+                            ProductRepo productRepo, MyBagService myBagService,
+                            EntityManager entityManager) {
         this.myBagItemRepo = myBagItemRepo;
         this.myBagRepo = myBagRepo;
         this.productRepo = productRepo;
         this.myBagService = myBagService;
+        this.entityManager = entityManager;
+    }
+
+    // ➤ Delete item - COMPLETELY FIXED VERSION
+    public MyBagItemResponseDTO deleteItem(Long id) {
+        // Get the item with its bag
+        MyBagItems item = myBagItemRepo.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("My Bag Items not found with ID: " + id));
+
+        // Store bag ID and convert to DTO BEFORE any deletion
+        Long bagId = item.getMyBag().getId();
+        MyBagItemResponseDTO deletedDto = toDto(item);
+
+        // Remove the item from the bag's collection FIRST
+        MyBag myBag = item.getMyBag();
+        myBag.getItems().removeIf(bagItem -> bagItem.getId().equals(id));
+
+        // Delete the item
+        myBagItemRepo.delete(item);
+
+        // Clear the persistence context to avoid detached entity issues
+        entityManager.flush();
+        entityManager.clear();
+
+        // Recalculate totals using a fresh query
+        recalculateBagTotalSafely(bagId);
+
+        return deletedDto;
+    }
+
+    // ➤ Safe recalculation method
+    private void recalculateBagTotalSafely(Long bagId) {
+        // Get a fresh instance of the bag from database
+        MyBag freshBag = myBagRepo.findById(bagId)
+                .orElseThrow(() -> new EntityNotFoundException("Bag not found with ID: " + bagId));
+
+        // Recalculate and save
+        freshBag.recalculateTotal();
+        myBagRepo.save(freshBag);
+    }
+
+    // ➤ Alternative delete method using native query (if above doesn't work)
+    public MyBagItemResponseDTO deleteItemNative(Long id) {
+        // Get the item first to return as DTO
+        MyBagItems item = myBagItemRepo.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("My Bag Items not found with ID: " + id));
+
+        Long bagId = item.getMyBag().getId();
+        MyBagItemResponseDTO deletedDto = toDto(item);
+
+        // Use native query to delete without entity state issues
+        myBagItemRepo.deleteById(id);
+
+        // Force flush and clear
+        entityManager.flush();
+        entityManager.clear();
+
+        // Recalculate safely
+        recalculateBagTotalSafely(bagId);
+
+        return deletedDto;
     }
 
     // ➤ Add item to bag
@@ -61,7 +126,9 @@ public class MyBagItemService {
         // Calculate total price and save
         item.calculateTotalPrice();
         MyBagItems saved = myBagItemRepo.save(item);
-        myBagService.recalculateTotal(myBag);
+
+        // Recalculate bag total safely
+        recalculateBagTotalSafely(myBag.getId());
 
         return toDto(saved);
     }
@@ -78,7 +145,9 @@ public class MyBagItemService {
         item.setQuantity(quantity);
         item.calculateTotalPrice();
         MyBagItems saved = myBagItemRepo.save(item);
-        myBagService.recalculateTotal(item.getMyBag());
+
+        // Recalculate bag total safely
+        recalculateBagTotalSafely(item.getMyBag().getId());
 
         return toDto(saved);
     }
@@ -107,18 +176,5 @@ public class MyBagItemService {
         return myBagItemRepo.findByMyBagId(bagId).stream()
                 .map(this::toDto)
                 .collect(Collectors.toList());
-    }
-
-    // ➤ Delete item
-    public MyBagItemResponseDTO deleteItem(Long id) {
-        MyBagItems item = myBagItemRepo.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("My Bag Items not found"));
-        MyBag myBag = item.getMyBag();
-
-        MyBagItemResponseDTO deletedDto = toDto(item);
-        myBagItemRepo.delete(item);
-        myBagService.recalculateTotal(myBag);
-
-        return deletedDto;
     }
 }

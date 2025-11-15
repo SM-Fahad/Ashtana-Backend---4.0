@@ -56,6 +56,39 @@ public class MyBagService {
                 itemDto.setPricePerItem(item.getProduct().getPrice());
                 itemDto.setQuantity(item.getQuantity());
                 itemDto.setTotalPrice(item.getTotalPrice());
+
+                // ADD IMAGE DATA - Handle FileData entities
+                if (item.getProduct().getImages() != null && !item.getProduct().getImages().isEmpty()) {
+                    // Convert FileData entities to image URLs
+                    List<String> imageUrls = item.getProduct().getImages().stream()
+                            .filter(fileData -> fileData.getIsActive() != null && fileData.getIsActive())
+                            .sorted((f1, f2) -> {
+                                // Sort by primary first, then by sortOrder
+                                if (Boolean.TRUE.equals(f1.getIsPrimary())) return -1;
+                                if (Boolean.TRUE.equals(f2.getIsPrimary())) return 1;
+                                return Integer.compare(f1.getSortOrder() != null ? f1.getSortOrder() : 0,
+                                        f2.getSortOrder() != null ? f2.getSortOrder() : 0);
+                            })
+                            .map(fileData -> {
+                                // Construct the full image URL from filePath
+                                String filePath = fileData.getFilePath();
+                                if (filePath.startsWith("/")) {
+                                    return "http://localhost:8081" + filePath;
+                                } else if (!filePath.startsWith("http")) {
+                                    return "http://localhost:8081/" + filePath;
+                                }
+                                return filePath;
+                            })
+                            .collect(Collectors.toList());
+
+                    itemDto.setProductImageUrls(imageUrls);
+
+                    // Set primary image URL
+                    if (!imageUrls.isEmpty()) {
+                        itemDto.setPrimaryImageUrl(imageUrls.get(0));
+                    }
+                }
+
                 return itemDto;
             }).collect(Collectors.toList()));
         }
@@ -95,8 +128,24 @@ public class MyBagService {
         return "My Bag deleted successfully.";
     }
 
-    // ➤ Recalculate total price
+    // ➤ Recalculate total price - FIXED VERSION (use this for updates)
     public void recalculateTotal(MyBag myBag) {
+        myBag.recalculateTotal();
+        myBagRepo.save(myBag);
+    }
+
+    // ➤ Recalculate total after item deletion - NEW METHOD
+    public void recalculateTotalAfterDelete(Long bagId) {
+        MyBag myBag = myBagRepo.findById(bagId)
+                .orElseThrow(() -> new EntityNotFoundException("Bag not found with ID: " + bagId));
+        myBag.recalculateTotal();
+        myBagRepo.save(myBag);
+    }
+
+    // ➤ Recalculate total by bag ID - SAFE METHOD
+    public void recalculateTotalByBagId(Long bagId) {
+        MyBag myBag = myBagRepo.findById(bagId)
+                .orElseThrow(() -> new EntityNotFoundException("Bag not found with ID: " + bagId));
         myBag.recalculateTotal();
         myBagRepo.save(myBag);
     }

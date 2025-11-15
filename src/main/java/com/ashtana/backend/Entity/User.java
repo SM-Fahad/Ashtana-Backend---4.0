@@ -1,6 +1,7 @@
 package com.ashtana.backend.Entity;
 
 import com.ashtana.backend.Enums.AccountStatus;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;
@@ -85,6 +86,7 @@ public class User {
 
     // Add to User entity
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonIgnore
     private MyBag myBag;
 
     // Add this field to the User class
